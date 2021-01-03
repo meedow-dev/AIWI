@@ -582,8 +582,7 @@ export default {
     }
 
     try {
-      let hash = location.hash.substring(1),
-        options = JSON.parse(hash);
+      let options = JSON.parse(decodeURIComponent(location.hash.substring(1)));
 
       if (options.url) {
         this.sl_host = options.url;

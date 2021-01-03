@@ -1,6 +1,5 @@
 <template>
   <div>
-    Host: {{ sl_host }}
     <form novalidate class="md-layout" @submit.prevent="validateForm">
       <md-card class="md-layout-item md-size-50 md-small-size-100">
         <md-card-header>
@@ -19,6 +18,7 @@
                   md-dense
                   :disabled="sending"
                 >
+                  <md-option value="rlv_folders">Query folders</md-option>
                   <md-option value="owner">OwnerSay (self + @RLV)</md-option>
                   <md-option value="whisper">Whisper (10 m)</md-option>
                   <md-option value="say">Say (20 m)</md-option>
@@ -30,7 +30,7 @@
 
             <div
               class="md-layout-item md-small-size-100"
-              v-if="form.speech_type != 'owner'"
+              v-if="shouldShowChannel(form.speech_type)"
             >
               <md-field :class="getValidationClass('speech_channel')">
                 <label for="speech-channel">Channel</label>
@@ -47,7 +47,7 @@
 
           <md-field
             :class="getValidationClass('speech_name')"
-            v-if="form.speech_type != 'owner'"
+            v-if="shouldShowName(form.speech_type)"
           >
             <label for="speech-name">Name</label>
             <md-input
@@ -63,7 +63,10 @@
             >
           </md-field>
 
-          <md-field :class="getValidationClass('speech_text')">
+          <md-field
+            :class="getValidationClass('speech_text')"
+            v-if="shouldShowText(form.speech_type)"
+          >
             <label for="speech-text">Text</label>
             <md-textarea
               name="speech-text"
@@ -85,13 +88,13 @@
               <div class="md-title">Result</div>
             </md-card-header>
             <md-card-content>
-              <iframe
-                style="width: 100%"
-                v-bind:src="resultFrameSrc"
+              <pre
+                style="width: 100%; text-align: left"
+                v-text="responseJSON"
                 v-bind:style="{
                   'background-color': lastResponse.succeeded ? '' : 'red'
                 }"
-              ></iframe>
+              ></pre>
             </md-card-content>
           </md-card>
         </md-card-content>
@@ -111,7 +114,7 @@
             <md-tooltip md-direction="top">Save</md-tooltip>
             <md-icon>save</md-icon>
           </md-button>
-          <md-button type="submit" class="md-primary" :disabled="sending">
+          <md-button @click="formSend" class="md-primary" :disabled="sending">
             <md-tooltip md-direction="top">Execute</md-tooltip>
             <md-icon>send</md-icon>
           </md-button>
@@ -228,6 +231,51 @@
         </md-card-content>
       </md-card>
 
+      <md-card class="md-layout-item">
+        <md-card-header>
+          <div class="md-title">Clothes</div>
+        </md-card-header>
+
+        <md-card-content>
+          <md-list class="clothes-list">
+            <md-list-item
+              v-for="item in clothes"
+              v-bind:key="item.name"
+              class="clothes-list-item"
+            >
+              <md-button @click="add_clothing(item)" class="md-icon-button">
+                <md-icon>add</md-icon>
+              </md-button>
+
+              <md-button @click="remove_clothing(item)" class="md-icon-button">
+                <md-icon>remove</md-icon>
+              </md-button>
+
+              <div class="md-layout-item">{{ item.name }}</div>
+            </md-list-item>
+          </md-list>
+
+          <md-field>
+            <label for="clothes_template">Template</label>
+            <md-textarea
+              name="clothes_template"
+              v-model="clothes_template"
+            ></md-textarea>
+          </md-field>
+
+          Message
+          <pre v-text="clothes_message" style="text-align: left;"></pre>
+
+          <md-button @click="dumpClothes()" class="md-icon-button">
+            <md-icon>edit</md-icon>
+          </md-button>
+
+          <md-button @click="updateClothes()" class="md-icon-button">
+            <md-icon>refresh</md-icon>
+          </md-button>
+        </md-card-content>
+      </md-card>
+
       <md-snackbar v-if="lastSpeech" :md-active.sync="formSend"
         >The command "Speech" has issued {{ lastSpeech.type }} with the text "{{
           lastSpeech.text
@@ -270,6 +318,9 @@ export default {
     search: null,
     searchTags: [],
 
+    clothes_template: `Clothes:\n\t<item>`,
+    clothes: [],
+
     haveLoaded: false,
 
     history_count: 0,
@@ -278,13 +329,10 @@ export default {
     drag: false,
     sending: false,
     lastSpeech: null,
-    lastResponse: { succeeded: true, response: "" }
+    lastResponse: { succeeded: true, response: undefined }
   }),
   validations: {
     form: {
-      speech_type: {
-        required
-      },
       speech_channel: {
         required
       },
@@ -298,14 +346,23 @@ export default {
     }
   },
   methods: {
-    formSave() {
+    shouldShowName(type) {
+      return !["owner", "rlv_folders"].includes(type);
+    },
+    shouldShowChannel(type) {
+      return !["owner", "rlv_folders"].includes(type);
+    },
+    shouldShowText(type) {
+      return ![].includes(type);
+    },
+    formToItem() {
       let name = this.form.speech_name;
       let type = this.form.speech_type;
       let text = this.form.speech_text;
       let channel = this.form.speech_channel;
 
-      if (!type || !text) return null;
-      if (type != "owner" && !name) return null;
+      if (!text && this.shouldShowText(type)) throw "No text!";
+      if (!name && this.shouldShowName(type)) throw "No name!";
 
       let item = {
         name: name,
@@ -317,20 +374,32 @@ export default {
       };
 
       if (type == "owner") {
-        item.name = name = "";
-        item.channel = channel = 0;
+        delete item.name;
+        delete item.channel;
+      } else if (type == "rlv_folders") {
+        delete item.name;
+        delete item.channel;
+        item.type = "RLV_QUERY";
+        item.text = `@getinv:${item.text}=456446`;
+        item.channel = 456446;
       }
 
-      name = name.toUpperCase();
-      type = type.toUpperCase();
-      text = text.toUpperCase();
+      return item;
+    },
+    formSave() {
+      let item = this.formToItem();
+
+      let name = (item.name || "").toUpperCase(),
+        type = item.type.toUpperCase(),
+        text = (item.text || "").toUpperCase(),
+        channel = item.channel;
 
       if (
         !this.history.find((h) => {
           return (
-            h.name.toUpperCase() == name &&
+            (h.name || "").toUpperCase() == name &&
             h.type.toUpperCase() == type &&
-            h.text.toUpperCase() == text &&
+            (h.text || "").toUpperCase() == text &&
             h.channel == channel
           );
         })
@@ -343,7 +412,7 @@ export default {
     sendSpeech(item) {
       const me = this;
 
-      me.lastResponse = { succeeded: true, response: "" };
+      me.lastResponse = { succeeded: true, response: undefined };
       me.sending = true;
 
       let toSend = {
@@ -351,30 +420,37 @@ export default {
         type: item.type,
         text: item.text,
         name: item.name,
-        chan: item.channel
+        channel: item.channel
       };
 
-      fetch(me.sl_host, {
-        method: "POST",
-        cache: "no-cache",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        redirect: "follow",
-        body: JSON.stringify(toSend)
-      })
-        .then(async (response) => {
-          let body = await response.text();
+      Object.entries(toSend)
+        .filter((pair) => pair[1] == undefined)
+        .forEach((pair) => delete toSend[pair[0]]);
 
-          if (response.ok) {
-            me.lastResponse = { succeeded: true, response: body };
-          } else {
-            me.lastResponse = { succeeded: false, response: body };
+      if (item.type == "RLV_QUERY") {
+        toSend.cmd = "RLV_QUERY";
+        delete toSend.type;
+      }
+
+      let url = me.sl_host;
+
+      if (url.split("").pop() != "/") url += "/";
+
+      return this.$jsonp(url, toSend)
+        .then(
+          function (res) {
+            if (res.success) {
+              me.lastResponse = { succeeded: true, response: res.data };
+            } else {
+              me.lastResponse = { succeeded: false, response: res.data };
+            }
+
+            return me.lastResponse;
+          },
+          function () {
+            me.lastResponse = { succeeded: false, response: "Network / url" };
           }
-        })
-        .catch((error) => {
-          me.lastResponse = { succeeded: false, response: error.message };
-        })
+        )
         .finally(() => {
           me.sending = false;
         });
@@ -490,13 +566,52 @@ export default {
       if (!this.$v.$invalid) {
         this.formSend();
       }
+    },
+    updateClothes() {
+      this.sendSpeech({
+        type: "RLV_QUERY",
+        text: `@getinv:.wardrobe/Clothes=456445`,
+        channel: 456445
+      }).then((data) => {
+        if (data.succeeded)
+        {
+          this.clothes = data.response.response.split(',').filter(i => i).sort().map(name => ({ name: name })).sort();
+        }
+      });
+    },
+    dumpClothes() {
+      if (!this.shouldShowText(this.form.speech_type))
+        this.form.speech_type = "SAY";
+      this.form.speech_text = this.clothes_message;
+    },
+    remove_clothing(item) {
+      this.sendSpeech({
+        type: "owner",
+        text: `@detachall:.wardrobe/Clothes/${item.name}=force`
+      });
+    },
+    add_clothing(item) {
+      this.sendSpeech({
+        type: "owner",
+        text: `@attachall:.wardrobe/Clothes/${item.name}=force`
+      });
     }
   },
   computed: {
-    resultFrameSrc() {
-      return (
-        "data:text/html;charset=utf-8," + escape(this.lastResponse.response)
-      );
+    clothes_message() {
+      return this.clothes_template
+        .split("\n")
+        .map((line) => {
+          if (line.indexOf("<item>") != -1)
+            return this.clothes
+              .map((c) => line.replace("<item>", c.name))
+              .join("\n");
+          else return line;
+        })
+        .join("\n");
+    },
+    responseJSON() {
+      return JSON.stringify(this.lastResponse.response, undefined, 2);
     },
     filteredHistory() {
       let tagsToSearchIn = this.searchTags;
@@ -579,16 +694,6 @@ export default {
 
       this.history = data.history || [];
       this.history_count = data.history_count || 0;
-    }
-
-    try {
-      let options = JSON.parse(decodeURIComponent(location.hash.substring(1)));
-
-      if (options.url) {
-        this.sl_host = options.url;
-      }
-    } catch (e) {
-      console.warn(e);
     }
 
     this.haveLoaded = true;

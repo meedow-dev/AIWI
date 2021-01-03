@@ -26,6 +26,48 @@ export default {
   props: {
     msg: String
   },
+  watch: {
+    sl_host: function (val) {
+      let options = this.getOptionsFromHash();
+
+      if (options.sl_host != val) {
+        options.url = val;
+        location.hash = encodeURIComponent(JSON.stringify(options));
+      }
+    }
+  },
+  methods: {
+    getOptionsFromHash() {
+      let hash = location.hash.substring(1);
+
+      if (!hash) return {};
+
+      return JSON.parse(decodeURIComponent(location.hash.substring(1)));
+    },
+    loadOptionsFromHash() {
+      try {
+        let options = this.getOptionsFromHash();
+
+        if (options.url) {
+          this.sl_host = options.url;
+        }
+      } catch (e) {
+        console.warn(e);
+      }
+    }
+  },
+  mounted() {
+    let me = this;
+
+    me.loadOptionsFromHash();
+    window.addEventListener(
+      "hashchange",
+      function () {
+        me.loadOptionsFromHash();
+      },
+      false
+    );
+  },
   data() {
     return {
       sl_host: ""

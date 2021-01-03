@@ -587,7 +587,9 @@ export default {
       if (options.url) {
         this.sl_host = options.url;
       }
-    } catch (e) {}
+    } catch (e) {
+      console.warn(e);
+    }
 
     this.haveLoaded = true;
   },

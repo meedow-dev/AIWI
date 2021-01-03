@@ -1,6 +1,6 @@
 module.exports = {
     publicPath: '',
-    outputDir: 'dest',
+    outputDir: 'docs',
     configureWebpack: {
         plugins: []
       }

@@ -449,6 +449,7 @@ export default {
           },
           function () {
             me.lastResponse = { succeeded: false, response: "Network / url" };
+            me.$emit("recover");
           }
         )
         .finally(() => {
@@ -570,7 +571,7 @@ export default {
     updateClothes() {
       this.sendSpeech({
         type: "RLV_QUERY",
-        text: `@getinv:.wardrobe/Clothes=456445`,
+        text: `@getinv:.outfits=456445`,
         channel: 456445
       }).then((data) => {
         if (data.succeeded)
@@ -587,13 +588,13 @@ export default {
     remove_clothing(item) {
       this.sendSpeech({
         type: "owner",
-        text: `@detachall:.wardrobe/Clothes/${item.name}=force`
+        text: `@detachall:.outfits/${item.name}=force`
       });
     },
     add_clothing(item) {
       this.sendSpeech({
         type: "owner",
-        text: `@attachall:.wardrobe/Clothes/${item.name}=force`
+        text: `@attachall:.outfits/${item.name}=force`
       });
     }
   },
